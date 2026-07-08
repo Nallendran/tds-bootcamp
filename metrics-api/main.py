@@ -87,7 +87,7 @@ def effective_config(set: list[str] = Query(default=[])):
     if os.getenv("APP_WORKERS"):
         config["workers"] = int(os.getenv("APP_WORKERS"))
 
-    # CLI overrides
+    # CLI overrides.env
     for item in set:
         if "=" not in item:
             continue
