@@ -23,6 +23,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+import os
+
+@app.get("/debug")
+def debug():
+    return {
+        "cwd": os.getcwd(),
+        "files": os.listdir(".")
+    }
 
 @app.middleware("http")
 async def add_headers(request, call_next):
