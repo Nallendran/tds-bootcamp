@@ -117,8 +117,13 @@ def extract(req: InvoiceRequest):
     # Amount (subtotal before tax)
     # -------------------------
     amount_patterns = [
-        r"Subtotal\s*[:.]?\s*(?:Rs\.?|₹)?\s*([\d,]+\.\d+)",
-        r"Sub[- ]?Total\s*[:.]?\s*(?:Rs\.?|₹)?\s*([\d,]+\.\d+)"
+        r"Subtotal\s*[:.]?\s*(?:Rs\.?|₹)?\s*([\d,]+(?:\.\d+)?)",
+        r"Sub[- ]?Total\s*[:.]?\s*(?:Rs\.?|₹)?\s*([\d,]+(?:\.\d+)?)",
+        r"Amount\s*[:.]?\s*(?:Rs\.?|₹)?\s*([\d,]+(?:\.\d+)?)",
+        r"Net Amount\s*[:.]?\s*(?:Rs\.?|₹)?\s*([\d,]+(?:\.\d+)?)",
+        r"Base Amount\s*[:.]?\s*(?:Rs\.?|₹)?\s*([\d,]+(?:\.\d+)?)",
+        r"Taxable Value\s*[:.]?\s*(?:Rs\.?|₹)?\s*([\d,]+(?:\.\d+)?)",
+        r"Before Tax\s*[:.]?\s*(?:Rs\.?|₹)?\s*([\d,]+(?:\.\d+)?)"
     ]
 
     for pattern in amount_patterns:
@@ -131,22 +136,71 @@ def extract(req: InvoiceRequest):
     # Tax
     # -------------------------
     tax_patterns = [
-        r"IGST.*?(?:Rs\.?|₹)\s*([\d,]+\.\d+)",
-        r"CGST.*?(?:Rs\.?|₹)\s*([\d,]+\.\d+)",
-        r"SGST.*?(?:Rs\.?|₹)\s*([\d,]+\.\d+)",
-        r"GST.*?(?:Rs\.?|₹)\s*([\d,]+\.\d+)",
-        r"Tax.*?(?:Rs\.?|₹)\s*([\d,]+\.\d+)"
+        r"IGST.*?(?:Rs\.?|₹)?\s*([\d,]+(?:\.\d+)?)",
+        r"CGST.*?(?:Rs\.?|₹)?\s*([\d,]+(?:\.\d+)?)",
+        r"SGST.*?(?:Rs\.?|₹)?\s*([\d,]+(?:\.\d+)?)",
+        r"GST.*?(?:Rs\.?|₹)?\s*([\d,]+(?:\.\d+)?)",
+        r"Tax.*?(?:Rs\.?|₹)?\s*([\d,]+(?:\.\d+)?)"
     ]
 
     taxes = []
 
     for pattern in tax_patterns:
         for match in re.finditer(pattern, text, re.I):
-            taxes.append(extract_amount(match.group(1)))
-
-    taxes = [x for x in taxes if x is not None]
+            value = extract_amount(match.group(1))
+            if value is not None:
+                taxes.append(value)
 
     if taxes:
         result["tax"] = round(sum(taxes), 2)
+
+    # -------------------------
+    # Amount fallback
+    # -------------------------
+    if result["amount"] is None:
+
+        amount_patterns = [
+            r"Amount\s*[:.]?\s*(?:Rs\.?|₹)?\s*([\d,]+(?:\.\d+)?)",
+            r"Net Amount\s*[:.]?\s*(?:Rs\.?|₹)?\s*([\d,]+(?:\.\d+)?)",
+            r"Base Amount\s*[:.]?\s*(?:Rs\.?|₹)?\s*([\d,]+(?:\.\d+)?)",
+            r"Taxable Value\s*[:.]?\s*(?:Rs\.?|₹)?\s*([\d,]+(?:\.\d+)?)",
+            r"Before Tax\s*[:.]?\s*(?:Rs\.?|₹)?\s*([\d,]+(?:\.\d+)?)"
+        ]
+
+        for pattern in amount_patterns:
+            m = re.search(pattern, text, re.I)
+            if m:
+                result["amount"] = extract_amount(m.group(1))
+                break
+
+    # -------------------------
+    # Last fallback for amount
+    # -------------------------
+    if result["amount"] is None:
+
+        numbers = re.findall(
+            r"(?:Rs\.?|₹)\s*([\d,]+(?:\.\d+)?)",
+            text,
+            re.I
+        )
+
+        values = []
+
+        for n in numbers:
+            try:
+                values.append(float(n.replace(",", "")))
+            except:
+                pass
+
+        if values:
+
+            if result["tax"] is not None:
+                candidates = [v for v in values if v > result["tax"]]
+
+                if candidates:
+                    result["amount"] = sorted(candidates)[-1]
+
+            if result["amount"] is None:
+                result["amount"] = sorted(values)[-1]
 
     return result
